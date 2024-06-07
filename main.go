@@ -40,7 +40,7 @@ func defaultConfig() config {
 	}
 }
 
-func handleTunnel(w http.ResponseWriter, r *http.Request) {
+func proxyTunnel(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Tunneling connection:\n\tClient=%v, Target=%v", r.RemoteAddr, r.Host)
 	reqBytes, err := httputil.DumpRequest(r, true)
 	if err != nil {
@@ -79,7 +79,7 @@ func transfer(from io.ReadCloser, to io.WriteCloser) {
 	io.Copy(to, from)
 }
 
-func handleHTTP(w http.ResponseWriter, r *http.Request) {
+func proxyHTTP(w http.ResponseWriter, r *http.Request) {
 
 	conf := defaultConfig()
 	log.Printf("HTTP connection:\n\tClient=%v, Target=%v\n", r.RemoteAddr, r.Host)
@@ -144,10 +144,10 @@ func run() {
 			logRequest(r, conf.logRequestBody)
 			// when proxy=http and target=https, it will tunnel
 			if r.Method == http.MethodConnect {
-				handleTunnel(w, r)
+				proxyTunnel(w, r)
 			} else {
 				// when proxy=http && target=http
-				handleHTTP(w, r)
+				proxyHTTP(w, r)
 			}
 		}),
 		// Disables HTTP/2
