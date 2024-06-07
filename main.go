@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -13,8 +14,40 @@ import (
 
 const TIMEOUT_MS = 5000
 
+type userAgent struct {
+	ua  string
+	pct float32
+}
+type config struct {
+	logRequestBody  bool
+	logResponseBody bool
+	address         string
+	// logTunnelBytes  bool
+}
+
+func (c config) String() string {
+	return fmt.Sprintf("Log Req Body:\t%v\nLog Res Body:\t%v\nAddress:\t%v",
+		c.logRequestBody,
+		c.logResponseBody,
+		c.address)
+}
+
+func defaultConfig() config {
+	return config{
+		logRequestBody:  false,
+		logResponseBody: false,
+		address:         ":8888",
+	}
+}
+
 func handleTunnel(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Tunneling connection:\nClient:\t%v\nTarget:\t%v", r.RemoteAddr, r.Host)
+	log.Printf("Tunneling connection:\n\tClient=%v, Target=%v", r.RemoteAddr, r.Host)
+	reqBytes, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Tunnel Req Bytes:\n%v\n", reqBytes)
 	// Establish a connection with the target server
 	destConn, err := net.DialTimeout("tcp", r.Host, TIMEOUT_MS*time.Millisecond)
 	if err != nil {
@@ -46,50 +79,16 @@ func transfer(from io.ReadCloser, to io.WriteCloser) {
 	io.Copy(to, from)
 }
 
-// func handleHTTP(w http.ResponseWriter, r *http.Request) {
-// 	log.Printf("HTTP connection:\nClient:\t%v\nTarget:\t%v\n", r.RemoteAddr, r.Host)
-// 	reqBytes, err := httputil.DumpRequest(r, true)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	log.Printf("Request Body:\n%v\n", string(reqBytes))
-// 	res, err := http.DefaultTransport.RoundTrip(r)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-// 		return
-// 	}
-
-// 	middleResBytes, err := httputil.DumpResponse(res, true)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	log.Printf("Response:\n%v\n", string(middleResBytes))
-// 	defer res.Body.Close()
-// 	finalRes := filterResponse(*res)
-// 	finalResBytes, err := httputil.DumpResponse(&finalRes, true)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	log.Printf("Final Response:\n%v\n", string(finalResBytes))
-// 	copyHeader(finalRes.Header, w.Header())
-// 	w.WriteHeader(finalRes.StatusCode)
-// 	io.Copy(w, finalRes.Body)
-// }
-
 func getHTTPHandler(conf config) func(http.ResponseWriter, *http.Request) {
 	handler :=
 		func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("HTTP connection:\nClient:\t%v\nTarget:\t%v\n", r.RemoteAddr, r.Host)
+			log.Printf("HTTP connection:\n\tClient=%v, Target=%v\n", r.RemoteAddr, r.Host)
 			reqBytes, err := httputil.DumpRequest(r, conf.logRequestBody)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			log.Printf("Request Body:\n%v\n", string(reqBytes))
+			log.Printf("HTTP Req:\n%v\n", string(reqBytes))
 			res, err := http.DefaultTransport.RoundTrip(r)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
@@ -102,7 +101,7 @@ func getHTTPHandler(conf config) func(http.ResponseWriter, *http.Request) {
 				return
 			}
 
-			log.Printf("Response:\n%v\n", string(middleResBytes))
+			log.Printf("HTTP Raw Res:\n%v\n", string(middleResBytes))
 			defer res.Body.Close()
 			finalRes := filterResponse(*res)
 			finalResBytes, err := httputil.DumpResponse(&finalRes, conf.logResponseBody)
@@ -110,27 +109,13 @@ func getHTTPHandler(conf config) func(http.ResponseWriter, *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			log.Printf("Final Response:\n%v\n", string(finalResBytes))
+			log.Printf("HTTP Final Res:\n%v\n", string(finalResBytes))
 			copyHeader(finalRes.Header, w.Header())
 			w.WriteHeader(finalRes.StatusCode)
 			io.Copy(w, finalRes.Body)
 		}
 	return handler
 }
-
-// type set[T comparable] map[T]struct{}
-
-// func (s set[T]) has(val T) bool {
-// 	_, ok := s[val]
-// 	return ok
-// }
-// func (s set[T]) insert(val T) bool {
-// 	if s.has(val) {
-// 		return false
-// 	}
-// 	s[val] = struct{}{}
-// 	return true
-// }
 
 type set struct {
 	entries map[string]struct{}
@@ -205,40 +190,50 @@ func copyHeader(from, to http.Header) {
 	}
 }
 
-type config struct {
-	logRequestBody  bool
-	logResponseBody bool
+func logRequest(r *http.Request, withBody bool) error {
+	reqBytes, err := httputil.DumpRequest(r, withBody)
+	if err != nil {
+		return err
+	}
+	log.Printf("\n->Request:\n%v\n", string(reqBytes))
+	return nil
 }
+func run() {
+	conf := defaultConfig()
+	log.Println("GO FORWARD HTTP(S) PROXY")
+	log.Printf("using config:\n%v\n", conf)
 
-func (c config) String() string {
-	return fmt.Sprintf("Log Req Body:\t%v\nLog Res Body:\t%v\n",
-		c.logRequestBody,
-		c.logResponseBody)
-}
-func run(conf config) {
-	fmt.Println("GO FORWARD HTTP(S) PROXY")
-	fmt.Printf("using config:\n%v\n", conf)
 	handleHTTP := getHTTPHandler(conf)
 
 	server := &http.Server{
-		Addr: ":8888",
+		Addr: conf.address,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("Connection:\n\tClient=%v, Target=%v", r.RemoteAddr, r.Host)
+			logRequest(r, conf.logRequestBody)
+			// when proxy=http and target=https, it will tunnel
 			if r.Method == http.MethodConnect {
 				handleTunnel(w, r)
 			} else {
+				// when proxy=http && target=http
 				handleHTTP(w, r)
 			}
 		}),
 		// Disables HTTP/2
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}
-	log.Fatal(server.ListenAndServe())
+
+	go func() {
+		// log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
+		log.Fatal(server.ListenAndServe())
+	}()
+	fmt.Println("Server started, press <Enter> to shutdown")
+	fmt.Scanln()
+	server.Shutdown(context.Background())
+	fmt.Println("Server stopped")
+	// log.Fatal(server.ListenAndServe())
 }
 
 func main() {
-	conf := config{
-		logRequestBody:  false,
-		logResponseBody: false,
-	}
-	run(conf)
+	// logReq := flag.Bool("")
+	run()
 }
