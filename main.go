@@ -132,37 +132,39 @@ func logRequest(r *http.Request, withBody bool) error {
 	log.Printf("\n->Request:\n%v\n", string(reqBytes))
 	return nil
 }
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	conf := defaultConfig()
+	log.Printf("Connection:\n\tClient=%v, Target=%v", r.RemoteAddr, r.Host)
+	logRequest(r, conf.logRequestBody)
+	// when proxy=http and target=https, it will tunnel
+	if r.Method == http.MethodConnect {
+		proxyTunnel(w, r)
+	} else {
+		// when proxy=http && target=http
+		proxyHTTP(w, r)
+	}
+}
 func run() {
 	conf := defaultConfig()
 	log.Println("GO FORWARD HTTP(S) PROXY")
 	log.Printf("using config:\n%v\n", conf)
 
 	server := &http.Server{
-		Addr: conf.address,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("Connection:\n\tClient=%v, Target=%v", r.RemoteAddr, r.Host)
-			logRequest(r, conf.logRequestBody)
-			// when proxy=http and target=https, it will tunnel
-			if r.Method == http.MethodConnect {
-				proxyTunnel(w, r)
-			} else {
-				// when proxy=http && target=http
-				proxyHTTP(w, r)
-			}
-		}),
+		Addr:    conf.address,
+		Handler: http.HandlerFunc(handler),
 		// Disables HTTP/2
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}
 
 	go func() {
-		// log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
+		// log.Fatal(server.ListenAndServe())
 		log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
 	}()
 	fmt.Println("Server started, press <Enter> to shutdown")
 	fmt.Scanln()
 	server.Shutdown(context.Background())
 	fmt.Println("Server stopped")
-	// log.Fatal(server.ListenAndServe())
 }
 
 func main() {
