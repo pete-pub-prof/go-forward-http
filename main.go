@@ -103,7 +103,6 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("HTTP Raw Res:\n%v\n", string(middleResBytes))
 	defer res.Body.Close()
-	// finalRes := filterResponse(*res)
 	finalRes := *res
 	finalResBytes, err := httputil.DumpResponse(&finalRes, conf.logResponseBody)
 	if err != nil {
@@ -157,7 +156,7 @@ func run() {
 
 	go func() {
 		// log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
-		log.Fatal(server.ListenAndServe())
+		log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
 	}()
 	fmt.Println("Server started, press <Enter> to shutdown")
 	fmt.Scanln()

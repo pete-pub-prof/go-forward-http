@@ -1,2 +1,8 @@
+**/*.pem
+**/*.cer
+**/*.crt
+**/*.p12
+
+
 scratch.txt
 user-agents.json
