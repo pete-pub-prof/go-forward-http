@@ -79,42 +79,41 @@ func transfer(from io.ReadCloser, to io.WriteCloser) {
 	io.Copy(to, from)
 }
 
-func getHTTPHandler(conf config) func(http.ResponseWriter, *http.Request) {
-	handler :=
-		func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("HTTP connection:\n\tClient=%v, Target=%v\n", r.RemoteAddr, r.Host)
-			reqBytes, err := httputil.DumpRequest(r, conf.logRequestBody)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			log.Printf("HTTP Req:\n%v\n", string(reqBytes))
-			res, err := http.DefaultTransport.RoundTrip(r)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusServiceUnavailable)
-				return
-			}
+func handleHTTP(w http.ResponseWriter, r *http.Request) {
 
-			middleResBytes, err := httputil.DumpResponse(res, conf.logResponseBody)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
+	conf := defaultConfig()
+	log.Printf("HTTP connection:\n\tClient=%v, Target=%v\n", r.RemoteAddr, r.Host)
+	reqBytes, err := httputil.DumpRequest(r, conf.logRequestBody)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("HTTP Req:\n%v\n", string(reqBytes))
+	res, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 
-			log.Printf("HTTP Raw Res:\n%v\n", string(middleResBytes))
-			defer res.Body.Close()
-			finalRes := filterResponse(*res)
-			finalResBytes, err := httputil.DumpResponse(&finalRes, conf.logResponseBody)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			log.Printf("HTTP Final Res:\n%v\n", string(finalResBytes))
-			copyHeader(finalRes.Header, w.Header())
-			w.WriteHeader(finalRes.StatusCode)
-			io.Copy(w, finalRes.Body)
-		}
-	return handler
+	middleResBytes, err := httputil.DumpResponse(res, conf.logResponseBody)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("HTTP Raw Res:\n%v\n", string(middleResBytes))
+	defer res.Body.Close()
+	finalRes := filterResponse(*res)
+	finalResBytes, err := httputil.DumpResponse(&finalRes, conf.logResponseBody)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("HTTP Final Res:\n%v\n", string(finalResBytes))
+	copyHeader(finalRes.Header, w.Header())
+	w.WriteHeader(finalRes.StatusCode)
+	io.Copy(w, finalRes.Body)
+
 }
 
 type set struct {
@@ -202,8 +201,6 @@ func run() {
 	conf := defaultConfig()
 	log.Println("GO FORWARD HTTP(S) PROXY")
 	log.Printf("using config:\n%v\n", conf)
-
-	handleHTTP := getHTTPHandler(conf)
 
 	server := &http.Server{
 		Addr: conf.address,
