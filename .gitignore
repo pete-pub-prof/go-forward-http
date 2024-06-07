@@ -3,7 +3,10 @@
 **/*.crt
 **/*.p12
 
+.dccache
+.idea/
 
-scratch.txt
+*.txt
+
 user-agents.json
 gofwdhttp
