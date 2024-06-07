@@ -103,7 +103,8 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("HTTP Raw Res:\n%v\n", string(middleResBytes))
 	defer res.Body.Close()
-	finalRes := filterResponse(*res)
+	// finalRes := filterResponse(*res)
+	finalRes := *res
 	finalResBytes, err := httputil.DumpResponse(&finalRes, conf.logResponseBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -114,71 +115,6 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(finalRes.StatusCode)
 	io.Copy(w, finalRes.Body)
 
-}
-
-type set struct {
-	entries map[string]struct{}
-}
-
-func newSet() *set {
-	entries := make(map[string]struct{})
-	return &set{entries: entries}
-}
-func (s set) has(val string) bool {
-	_, ok := s.entries[val]
-	return ok
-}
-func (s set) insert(val string) bool {
-	if s.has(val) {
-		return false
-	}
-	s.entries[val] = struct{}{}
-	return true
-}
-
-type headerEntry struct {
-	key    string
-	values []string
-}
-
-func withoutHeaders(in <-chan headerEntry, unwanted set) <-chan headerEntry {
-	out := make(chan headerEntry)
-	go func() {
-		defer close(out)
-		for entry := range in {
-			if !unwanted.has(entry.key) {
-				out <- entry
-			}
-		}
-	}()
-	// for header, _ := range unwanted {
-	// 	delete(h, header)
-	// }
-	return out
-}
-func filterResponse(response http.Response) http.Response {
-	filteredRes := response
-	headerCh := make(chan headerEntry)
-	unwantedHeaders := newSet()
-	if unwantedHeaders == nil {
-		log.Fatalf("Unwanted Headers set is nil")
-	}
-	unwantedHeaders.insert("Cookie")
-	go func() {
-		defer close(headerCh)
-		for k, vals := range response.Header {
-			headerCh <- headerEntry{key: http.CanonicalHeaderKey(k), values: vals}
-		}
-	}()
-	filteredHeaderCh := withoutHeaders(headerCh, *unwantedHeaders)
-	go func() {
-		for h := range filteredHeaderCh {
-			for _, v := range h.values {
-				filteredRes.Header.Add(h.key, v)
-			}
-		}
-	}()
-	return filteredRes
 }
 
 func copyHeader(from, to http.Header) {
