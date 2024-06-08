@@ -41,13 +41,15 @@ func defaultConfig() config {
 }
 
 func proxyTunnel(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("w's type is %T\n", w)
 	log.Printf("Tunneling connection:\n\tClient=%v, Target=%v", r.RemoteAddr, r.Host)
 	reqBytes, err := httputil.DumpRequest(r, true)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Tunnel Req Bytes:\n%v\n", reqBytes)
+	//log.Printf("Tunnel Req Bytes:\n%v\n", reqBytes)
+	log.Printf("Tunnel Req String:\n%v\n", string(reqBytes))
 	// Establish a connection with the target server
 	destConn, err := net.DialTimeout("tcp", r.Host, TIMEOUT_MS*time.Millisecond)
 	if err != nil {
@@ -158,8 +160,8 @@ func run() {
 	}
 
 	go func() {
-		// log.Fatal(server.ListenAndServe())
-		log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
+		log.Fatal(server.ListenAndServe())
+		//log.Fatal(server.ListenAndServeTLS("./certificate.pem", "./privatekey.pem"))
 	}()
 	fmt.Println("Server started, press <Enter> to shutdown")
 	fmt.Scanln()
