@@ -1,3 +1,11 @@
+# Go Forward HTTP Proxy
+
+## Usage
+
+### HTTP
+
+### HTTP(S)
+
 #### Generating a Self-signed certificate for TLS
 ```sh
 # Generate self-signed cert
